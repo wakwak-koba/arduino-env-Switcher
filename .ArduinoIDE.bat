@@ -5,9 +5,9 @@ if "%ENV_NAME%" == "" (
   rem 環境値を入力
   set /p ENV_NAME="環境名を入力してください。"
 )
-set base=./
 if "%ENV_NAME%" == "" goto exit_bat
 
+set base=./
 if not exist "%base%\.backup" (
   rem 初回起動時ぽいので、いちお退避させとく
   echo Arduino IDE.bat が初めて実行されます。
@@ -24,10 +24,22 @@ if not exist "%base%\.backup" (
 )
 
 set env_base=%base%\%ENV_NAME%
-rem 専用環境のフォルダ作成
-if not exist "%env_base%" (
+
+rem 起動用のバッチファイル作成
+if not exist "%env_base%.bat" (
   echo %ENV_NAME% 用の環境を新規に作ります
   pause
+  (
+    echo @echo off
+    echo cd /d "%%~dp0"
+    echo call "%~nx0" "%ENV_NAME%"
+  ) > "%ENV_NAME%.bat"
+  start "" "%ENV_NAME%.bat"
+  goto exit_bat
+)
+
+rem 専用環境のフォルダ作成
+if not exist "%env_base%" (
   mkdir "%env_base%"
   mkdir "%env_base%\.arduinoIDE"
   echo directories:>  "%env_base%\.arduinoIDE\arduino-cli.yaml"
@@ -63,16 +75,31 @@ mklink /J "%USERPROFILE%\AppData\Roaming\arduino-ide" "%env_base%\arduino-ide"
 mklink /J "%USERPROFILE%\AppData\Local\arduino"       "%env_base%\arduino"
 mklink /J "%USERPROFILE%\Documents\Arduino\libraries" "%env_base%\libraries"
 
+if "%RAM_DRIVE%"=="" goto start_ide
+set "LAST_CHAR=%RAM_DRIVE:~-1%"
+if "%LAST_CHAR%"==":" set "FINAL_RAM_DRIVE=%RAM_DRIVE%"
+if not "%LAST_CHAR%"==":" set "FINAL_RAM_DRIVE=%RAM_DRIVE%:"
 
+vol %FINAL_RAM_DRIVE% >nul 2>&1
+if errorlevel 1 goto start_ide
+
+rem 作業領域を RAM_DRIVE に変更する
+if not exist "%FINAL_RAM_DRIVE%\arduino" (
+  mkdir "%FINAL_RAM_DRIVE%\arduino"
+)
+if not exist "%FINAL_RAM_DRIVE%\arduino\%ENV_NAME%" (
+  mkdir "%FINAL_RAM_DRIVE%\arduino\%ENV_NAME%"
+)
+
+rmdir "%USERPROFILE%\AppData\Local\arduino" /S /Q
+mklink /J "%USERPROFILE%\AppData\Local\arduino"       "%FINAL_RAM_DRIVE%\arduino\%ENV_NAME%"
+
+:start_ide
 if exist "C:\Program Files\Arduino IDE\Arduino IDE.exe" (
-  echo Arduino IDE を起動します
-  timeout 3
   start "" "C:\Program Files\Arduino IDE\Arduino IDE.exe"
   goto exit_bat
 )
 if exist "%USERPROFILE%\AppData\Local\Programs\Arduino IDE\Arduino IDE.exe" (
-  echo Arduino IDE を起動します
-  timeout 3
   start "" "%USERPROFILE%\AppData\Local\Programs\Arduino IDE\Arduino IDE.exe"
   goto exit_bat
 )
